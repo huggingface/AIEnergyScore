@@ -5,6 +5,3 @@ diffusers==0.30.0
 huggingface-hub==0.24.5
 librosa==0.10.1
 omegaconf==2.3.0
-# optimum-benchmark @ git+https://github.com/huggingface/optimum-benchmark@energy_star_dev
-torch==2.4.0
-transformers==4.44.0
