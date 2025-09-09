@@ -3,7 +3,8 @@ set -e
 
 RESULTS_DIR="/results"
 
-python /check_h100.py
+python /launch_backend.py
+# python /check_h100.py
 if [[ $? = 0 ]]; then
     mkdir -p "${RESULTS_DIR}"
     # Force Hydra (used by optimum-benchmark) to write outputs into /results
