@@ -3,7 +3,7 @@
 # Usage: ./run_docker.sh [OPTIONS] [docker run arguments...]
 #
 # Options:
-#   -n, --num-samples NUM    Number of prompts to test (default: 20)
+#   -n, --num-samples NUM    Number of prompts to test (default: 10)
 #                           Applies to all backends (pytorch, vllm, optimum)
 #   -h, --help              Show this help message
 #
@@ -35,7 +35,7 @@ IMAGE_NAME="${DOCKER_IMAGE:-ai_energy_score}"
 RESULTS_DIR="${RESULTS_DIR:-$(pwd)/results}"
 HF_CACHE="${HF_HOME:-$HOME/.cache/huggingface}"
 HF_TOKEN_FILE="${HOME}/.cache/huggingface/token"
-NUM_SAMPLES=20
+NUM_SAMPLES=10
 
 # Function to show help
 show_help() {

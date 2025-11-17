@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tests for _is_reasoning_enabled() helper function and Qwen model handling.
+Tests for is_reasoning_enabled() helper function and Qwen model handling.
 
 These tests ensure that the bug where Qwen models with enable_thinking=False
 were treated as reasoning-enabled is prevented.
@@ -17,76 +17,131 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from batch_runner import BatchRunner
 from model_config_parser import ModelConfig
+from reasoning_helpers import is_reasoning_enabled, get_token_parameters
 
 # Check if ai_energy_benchmarks is available
 try:
-    import ai_energy_benchmarks
-    HAS_AI_ENERGY_BENCHMARKS = True
+    import importlib.util
+
+    HAS_AI_ENERGY_BENCHMARKS = (
+        importlib.util.find_spec("ai_energy_benchmarks") is not None
+    )
 except ImportError:
     HAS_AI_ENERGY_BENCHMARKS = False
 
 
 class TestIsReasoningEnabled:
-    """Test the _is_reasoning_enabled() helper function."""
+    """Test the is_reasoning_enabled() helper function."""
 
-    @pytest.fixture
-    def runner(self):
-        """Create BatchRunner instance."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            return BatchRunner(
-                csv_path="oct_2025_models.csv",
-                output_dir=tmpdir,
-                backend_type="pytorch",
-                num_prompts=1,
-            )
-
-    def test_none_params_is_not_reasoning(self, runner):
+    def test_none_params_is_not_reasoning(self):
         """Test that None reasoning_params returns False."""
-        assert runner._is_reasoning_enabled(None) is False
+        assert is_reasoning_enabled(None) is False
 
-    def test_empty_dict_is_not_reasoning(self, runner):
+    def test_empty_dict_is_not_reasoning(self):
         """Test that empty dict returns False."""
-        assert runner._is_reasoning_enabled({}) is False
+        assert is_reasoning_enabled({}) is False
 
-    def test_enable_thinking_false_is_not_reasoning(self, runner):
+    def test_enable_thinking_false_is_not_reasoning(self):
         """Test that enable_thinking=False returns False (Qwen Off mode)."""
         params = {"enable_thinking": False}
-        assert runner._is_reasoning_enabled(params) is False
+        assert is_reasoning_enabled(params) is False
 
-    def test_enable_thinking_true_is_reasoning(self, runner):
+    def test_enable_thinking_true_is_reasoning(self):
         """Test that enable_thinking=True returns True (Qwen On mode)."""
         params = {"enable_thinking": True}
-        assert runner._is_reasoning_enabled(params) is True
+        assert is_reasoning_enabled(params) is True
 
-    def test_reasoning_false_is_not_reasoning(self, runner):
+    def test_reasoning_false_is_not_reasoning(self):
         """Test that reasoning=False returns False."""
         params = {"reasoning": False}
-        assert runner._is_reasoning_enabled(params) is False
+        assert is_reasoning_enabled(params) is False
 
-    def test_reasoning_true_is_reasoning(self, runner):
+    def test_reasoning_true_is_reasoning(self):
         """Test that reasoning=True returns True."""
         params = {"reasoning": True}
-        assert runner._is_reasoning_enabled(params) is True
+        assert is_reasoning_enabled(params) is True
 
-    def test_reasoning_effort_off_is_not_reasoning(self, runner):
+    def test_reasoning_effort_off_is_not_reasoning(self):
         """Test that reasoning_effort='off' returns False."""
         params = {"reasoning_effort": "off"}
-        assert runner._is_reasoning_enabled(params) is False
+        assert is_reasoning_enabled(params) is False
 
-    def test_reasoning_effort_high_is_reasoning(self, runner):
+    def test_reasoning_effort_high_is_reasoning(self):
         """Test that reasoning_effort='high' returns True."""
         params = {"reasoning_effort": "high"}
-        assert runner._is_reasoning_enabled(params) is True
+        assert is_reasoning_enabled(params) is True
 
-    def test_reasoning_effort_medium_is_reasoning(self, runner):
+    def test_reasoning_effort_medium_is_reasoning(self):
         """Test that reasoning_effort='medium' returns True."""
         params = {"reasoning_effort": "medium"}
-        assert runner._is_reasoning_enabled(params) is True
+        assert is_reasoning_enabled(params) is True
 
-    def test_reasoning_effort_low_is_reasoning(self, runner):
+    def test_reasoning_effort_low_is_reasoning(self):
         """Test that reasoning_effort='low' returns True."""
         params = {"reasoning_effort": "low"}
-        assert runner._is_reasoning_enabled(params) is True
+        assert is_reasoning_enabled(params) is True
+
+
+class TestGetTokenParameters:
+    """Test the get_token_parameters() helper function."""
+
+    def test_none_params_returns_non_reasoning_tokens(self):
+        """Test that None params returns non-reasoning token limits."""
+        result = get_token_parameters(None)
+        assert result == {"max_new_tokens": 10, "min_new_tokens": 10}
+
+    def test_empty_dict_returns_non_reasoning_tokens(self):
+        """Test that empty dict returns non-reasoning token limits."""
+        result = get_token_parameters({})
+        assert result == {"max_new_tokens": 10, "min_new_tokens": 10}
+
+    def test_enable_thinking_false_returns_non_reasoning_tokens(self):
+        """Test that enable_thinking=False returns non-reasoning limits (Qwen Off)."""
+        params = {"enable_thinking": False}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 10, "min_new_tokens": 10}
+
+    def test_reasoning_false_returns_non_reasoning_tokens(self):
+        """Test that reasoning=False returns non-reasoning token limits."""
+        params = {"reasoning": False}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 10, "min_new_tokens": 10}
+
+    def test_reasoning_effort_off_returns_non_reasoning_tokens(self):
+        """Test that reasoning_effort='off' returns non-reasoning token limits."""
+        params = {"reasoning_effort": "off"}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 10, "min_new_tokens": 10}
+
+    def test_enable_thinking_true_returns_reasoning_tokens(self):
+        """Test that enable_thinking=True returns reasoning limits (Qwen On)."""
+        params = {"enable_thinking": True}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 8192, "min_new_tokens": 1}
+
+    def test_reasoning_true_returns_reasoning_tokens(self):
+        """Test that reasoning=True returns reasoning token limits."""
+        params = {"reasoning": True}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 8192, "min_new_tokens": 1}
+
+    def test_reasoning_effort_low_returns_reasoning_tokens(self):
+        """Test that reasoning_effort='low' returns reasoning token limits."""
+        params = {"reasoning_effort": "low"}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 8192, "min_new_tokens": 1}
+
+    def test_reasoning_effort_medium_returns_reasoning_tokens(self):
+        """Test that reasoning_effort='medium' returns reasoning token limits."""
+        params = {"reasoning_effort": "medium"}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 8192, "min_new_tokens": 1}
+
+    def test_reasoning_effort_high_returns_reasoning_tokens(self):
+        """Test that reasoning_effort='high' returns reasoning token limits."""
+        params = {"reasoning_effort": "high"}
+        result = get_token_parameters(params)
+        assert result == {"max_new_tokens": 8192, "min_new_tokens": 1}
 
 
 class TestQwenModelHandling:
@@ -103,7 +158,9 @@ class TestQwenModelHandling:
                 num_prompts=2,
             )
 
-    @pytest.mark.skipif(not HAS_AI_ENERGY_BENCHMARKS, reason="Requires ai_energy_benchmarks package")
+    @pytest.mark.skipif(
+        not HAS_AI_ENERGY_BENCHMARKS, reason="Requires ai_energy_benchmarks package"
+    )
     def test_qwen_off_mode_uses_small_tokens(self, runner):
         """Test that Qwen Off mode (enable_thinking=False) uses 10 token limit."""
         config = ModelConfig(
@@ -119,9 +176,10 @@ class TestQwenModelHandling:
 
         # Build benchmark config
         from debug_logger import DebugLogger
+
         run_dir = Path(runner.output_dir) / "test_qwen_off"
         run_dir.mkdir(parents=True, exist_ok=True)
-        
+
         logger = DebugLogger(
             log_dir=str(runner.logs_dir),
             model_name=config.model_id,
@@ -132,14 +190,19 @@ class TestQwenModelHandling:
         logger.close()
 
         # Verify: Off mode should use small token limits
-        assert benchmark_config.scenario.generate_kwargs["max_new_tokens"] == 10, \
-            "Qwen Off mode should use max_new_tokens=10"
-        assert benchmark_config.scenario.generate_kwargs["min_new_tokens"] == 10, \
-            "Qwen Off mode should use min_new_tokens=10"
-        assert benchmark_config.scenario.reasoning is False, \
-            "Qwen Off mode should have reasoning=False"
+        assert (
+            benchmark_config.scenario.generate_kwargs["max_new_tokens"] == 10
+        ), "Qwen Off mode should use max_new_tokens=10"
+        assert (
+            benchmark_config.scenario.generate_kwargs["min_new_tokens"] == 10
+        ), "Qwen Off mode should use min_new_tokens=10"
+        assert (
+            benchmark_config.scenario.reasoning is False
+        ), "Qwen Off mode should have reasoning=False"
 
-    @pytest.mark.skipif(not HAS_AI_ENERGY_BENCHMARKS, reason="Requires ai_energy_benchmarks package")
+    @pytest.mark.skipif(
+        not HAS_AI_ENERGY_BENCHMARKS, reason="Requires ai_energy_benchmarks package"
+    )
     def test_qwen_on_mode_uses_large_tokens(self, runner):
         """Test that Qwen On mode (enable_thinking=True) uses 8192 token limit."""
         config = ModelConfig(
@@ -154,9 +217,10 @@ class TestQwenModelHandling:
         )
 
         from debug_logger import DebugLogger
+
         run_dir = Path(runner.output_dir) / "test_qwen_on"
         run_dir.mkdir(parents=True, exist_ok=True)
-        
+
         logger = DebugLogger(
             log_dir=str(runner.logs_dir),
             model_name=config.model_id,
@@ -167,12 +231,15 @@ class TestQwenModelHandling:
         logger.close()
 
         # Verify: On mode should use large token limits
-        assert benchmark_config.scenario.generate_kwargs["max_new_tokens"] == 8192, \
-            "Qwen On mode should use max_new_tokens=8192"
-        assert benchmark_config.scenario.generate_kwargs["min_new_tokens"] == 1, \
-            "Qwen On mode should use min_new_tokens=1"
-        assert benchmark_config.scenario.reasoning is True, \
-            "Qwen On mode should have reasoning=True"
+        assert (
+            benchmark_config.scenario.generate_kwargs["max_new_tokens"] == 8192
+        ), "Qwen On mode should use max_new_tokens=8192"
+        assert (
+            benchmark_config.scenario.generate_kwargs["min_new_tokens"] == 1
+        ), "Qwen On mode should use min_new_tokens=1"
+        assert (
+            benchmark_config.scenario.reasoning is True
+        ), "Qwen On mode should have reasoning=True"
 
 
 class TestDockerCommandQwen:
@@ -191,16 +258,12 @@ class TestDockerCommandQwen:
 
     def test_qwen_off_docker_command_structure(self, runner):
         """Test that Qwen Off mode docker command has correct structure."""
-        config = ModelConfig(
-            model_id="Qwen/Qwen3-0.6B",
-            priority=3,
-            model_class="A",
-            task="text_gen",
-            reasoning_state="Off",
-            chat_template="enable_thinking=False",
-            reasoning_params={"enable_thinking": False},
-            use_harmony=False,
-        )
+        # Note: This test validates token parameter expectations for Qwen Off mode
+        # The actual token parameter logic is tested in TestGetTokenParameters
+        # This test ensures we understand what should be in the docker command
+
+        # Verify runner is available
+        assert runner is not None
 
         # The docker command should include:
         # - scenario.reasoning=False

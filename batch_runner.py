@@ -15,14 +15,15 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Dict, Optional
 
+from reasoning_helpers import is_reasoning_enabled, get_token_parameters
+
 # Configure PyTorch CUDA allocator to reduce fragmentation
 # This must be set BEFORE any CUDA operations
-os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 # Add paths for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -45,7 +46,9 @@ try:
     from ai_energy_benchmarks.runner import BenchmarkRunner
 except ImportError as e:
     print(f"Warning: ai_energy_benchmarks not installed or not in path: {e}")
-    print("PyTorch backend will use docker, vLLM backend requires: pip install ai_energy_benchmarks")
+    print(
+        "PyTorch backend will use docker, vLLM backend requires: pip install ai_energy_benchmarks"
+    )
     # Set all to None for type hints (won't be used with PyTorch backend)
     BackendConfig = None  # type: ignore
     BenchmarkConfig = None  # type: ignore
@@ -102,34 +105,8 @@ class BatchRunner:
             # Default to None - will use HuggingFace dataset EnergyStarAI/text_generation
             self.prompts_file = None
 
-    def _is_reasoning_enabled(self, reasoning_params: Optional[Dict]) -> bool:
-        """Check if reasoning is actually enabled based on parameter values.
-
-        Args:
-            reasoning_params: Dictionary of reasoning parameters
-
-        Returns:
-            True if reasoning is enabled, False otherwise
-        """
-        if not reasoning_params:
-            return False
-
-        # Check common reasoning disable patterns
-        if reasoning_params.get('enable_thinking') is False:
-            return False
-        if reasoning_params.get('reasoning') is False:
-            return False
-        if reasoning_params.get('reasoning_effort') == 'off':
-            return False
-
-        # Any other parameters present = reasoning enabled
-        return True
-
     def _run_via_docker(
-        self,
-        config: ModelConfig,
-        run_dir: Path,
-        logger: DebugLogger
+        self, config: ModelConfig, run_dir: Path, logger: DebugLogger
     ) -> Optional[Dict]:
         """Run benchmark via docker using run_docker.sh.
 
@@ -153,8 +130,10 @@ class BatchRunner:
             # Build command - use text_generation config with overrides
             cmd = [
                 str(run_docker_script),
-                "-n", str(self.num_prompts or 10),
-                "--config-name", "text_generation",
+                "-n",
+                str(self.num_prompts or 10),
+                "--config-name",
+                "text_generation",
             ]
 
             # Add overrides for model and dataset
@@ -168,7 +147,7 @@ class BatchRunner:
                 cmd.append("scenario.dataset_name=EnergyStarAI/text_generation")
 
             # Add reasoning parameters if actually enabled
-            if self._is_reasoning_enabled(config.reasoning_params):
+            if is_reasoning_enabled(config.reasoning_params):
                 cmd.append("scenario.reasoning=True")
                 # Note: reasoning_params is a dict, needs special handling
                 for key, value in config.reasoning_params.items():
@@ -193,9 +172,13 @@ class BatchRunner:
             # Set environment variables
             env = os.environ.copy()
             env["BENCHMARK_BACKEND"] = "pytorch"
-            env["RESULTS_DIR"] = str(run_dir.resolve())  # Convert to absolute path for docker
+            env["RESULTS_DIR"] = str(
+                run_dir.resolve()
+            )  # Convert to absolute path for docker
             env["DOCKER_IMAGE"] = os.getenv("DOCKER_IMAGE", "ai_energy_score")
-            env["HF_HOME"] = os.getenv("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
+            env["HF_HOME"] = os.getenv(
+                "HF_HOME", str(Path.home() / ".cache" / "huggingface")
+            )
 
             logger.info(f"Running docker command: {' '.join(cmd)}")
             logger.info(f"Results will be saved to: {run_dir}")
@@ -216,7 +199,9 @@ class BatchRunner:
                 logger.debug(f"Docker stderr:\n{result.stderr}")
 
             if result.returncode != 0:
-                logger.error(f"Docker command failed with return code {result.returncode}")
+                logger.error(
+                    f"Docker command failed with return code {result.returncode}"
+                )
                 logger.error(f"Stderr: {result.stderr}")
                 return None
 
@@ -226,7 +211,7 @@ class BatchRunner:
                 logger.error(f"Results file not found: {results_file}")
                 return None
 
-            with open(results_file, 'r') as f:
+            with open(results_file, "r") as f:
                 results = json.load(f)
 
             logger.info("Successfully loaded results from docker run")
@@ -246,6 +231,154 @@ class BatchRunner:
             self._cleanup_docker_containers(logger)
             return None
 
+    def _run_non_docker(
+        self, config: ModelConfig, run_dir: Path, logger: DebugLogger
+    ) -> Optional[Dict]:
+        """Run benchmark directly without Docker using ai_energy_benchmarks.
+
+        Args:
+            config: ModelConfig to run
+            run_dir: Output directory for this run
+            logger: Logger instance
+
+        Returns:
+            Results dictionary if successful, None otherwise
+        """
+        try:
+            # Check if BenchmarkRunner is available
+            if BenchmarkRunner is None:
+                logger.error(
+                    "BenchmarkRunner not available - install ai_energy_benchmarks"
+                )
+                return None
+
+            logger.info(
+                "Running benchmark directly (non-Docker) using ai_energy_benchmarks..."
+            )
+
+            # Build benchmark configuration (same as vLLM backend)
+            benchmark_config = self._build_benchmark_config(config, run_dir, logger)
+
+            # Create and run benchmark
+            logger.info("Initializing benchmark runner...")
+            runner = BenchmarkRunner(benchmark_config)
+
+            # Validate
+            logger.info("Validating environment...")
+            try:
+                if not runner.validate():
+                    error_msg = "Benchmark validation failed"
+                    logger.error(error_msg)
+
+                    # Try to get more details about the failure
+                    logger.debug(
+                        "Attempting to initialize backend directly for detailed error..."
+                    )
+                    try:
+                        if hasattr(runner.backend, "_initialize_model"):
+                            runner.backend._initialize_model()
+                    except Exception as init_error:
+                        detailed_error = (
+                            f"Benchmark validation failed: {str(init_error)}"
+                        )
+                        logger.error(f"Detailed error: {detailed_error}")
+                        return None
+
+                    return None
+            except Exception as val_error:
+                error_msg = f"Validation error: {str(val_error)}"
+                logger.error(error_msg)
+                logger.log_error_details(val_error)
+                return None
+
+            # Run benchmark
+            logger.info(f"Running benchmark with {self.num_prompts} prompts...")
+            results = runner.run()
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Failed to run benchmark: {e}")
+            logger.log_error_details(e)
+            return None
+
+    def _parse_benchmark_results(self, run_dir: Path, logger: DebugLogger) -> Dict:
+        """Parse benchmark results from output files.
+
+        Args:
+            run_dir: Directory containing results
+            logger: Logger instance
+
+        Returns:
+            Results dictionary
+        """
+        results = {}
+
+        # Log directory contents for debugging
+        logger.debug(f"Checking for results in: {run_dir}")
+        if run_dir.exists():
+            files = list(run_dir.iterdir())
+            logger.debug(f"Files in run_dir: {[f.name for f in files]}")
+
+        # Look for CSV results file
+        csv_files = list(run_dir.glob("*.csv"))
+        if csv_files:
+            latest_csv = max(csv_files, key=lambda f: f.stat().st_mtime)
+            logger.debug(f"Found results CSV: {latest_csv}")
+
+            try:
+                import pandas as pd
+
+                df = pd.read_csv(latest_csv)
+                logger.debug(f"CSV has {len(df)} rows")
+                results["summary"] = {
+                    "successful_prompts": len(df),
+                    "total_prompts": len(df),
+                }
+
+                # Add performance metrics if available
+                if "latency" in df.columns:
+                    results["summary"]["avg_latency"] = df["latency"].mean()
+                if "tokens_per_second" in df.columns:
+                    results["summary"]["avg_throughput"] = df[
+                        "tokens_per_second"
+                    ].mean()
+
+            except Exception as e:
+                logger.warning(f"Could not parse CSV results: {e}")
+        else:
+            logger.warning(f"No CSV results found in {run_dir}")
+            # Return minimal results to indicate completion
+            results["summary"] = {
+                "successful_prompts": 0,
+                "total_prompts": self.num_prompts or 0,
+            }
+
+        # Look for energy/emissions data
+        emissions_dir = run_dir / "emissions"
+        if emissions_dir.exists():
+            emissions_files = list(emissions_dir.glob("*.csv"))
+            if emissions_files:
+                latest_emissions = max(emissions_files, key=lambda f: f.stat().st_mtime)
+                try:
+                    import pandas as pd
+
+                    df = pd.read_csv(latest_emissions)
+                    results["energy"] = {
+                        "total_energy_kwh": (
+                            df["energy_consumed"].sum()
+                            if "energy_consumed" in df.columns
+                            else 0
+                        ),
+                        "emissions_kg_co2": (
+                            df["emissions"].sum() if "emissions" in df.columns else 0
+                        ),
+                    }
+                except Exception as e:
+                    logger.warning(f"Could not parse emissions data: {e}")
+
+        return results
+
     def _cleanup_docker_containers(self, logger: DebugLogger) -> None:
         """Clean up any lingering Docker containers from benchmark runs.
 
@@ -258,26 +391,39 @@ class BatchRunner:
 
             # Find and remove any exited ai_energy_score containers
             result = subprocess.run(
-                ["docker", "ps", "-a", "--filter", "ancestor=ai_energy_score", "--filter", "status=exited", "-q"],
+                [
+                    "docker",
+                    "ps",
+                    "-a",
+                    "--filter",
+                    "ancestor=ai_energy_score",
+                    "--filter",
+                    "status=exited",
+                    "-q",
+                ],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
 
             if result.returncode == 0 and result.stdout.strip():
-                container_ids = result.stdout.strip().split('\n')
-                logger.debug(f"Found {len(container_ids)} exited containers to clean up")
+                container_ids = result.stdout.strip().split("\n")
+                logger.debug(
+                    f"Found {len(container_ids)} exited containers to clean up"
+                )
 
                 for container_id in container_ids:
                     try:
                         subprocess.run(
                             ["docker", "rm", "-f", container_id],
                             capture_output=True,
-                            timeout=10
+                            timeout=10,
                         )
                         logger.debug(f"Removed container {container_id[:12]}")
                     except Exception as rm_err:
-                        logger.warning(f"Failed to remove container {container_id[:12]}: {rm_err}")
+                        logger.warning(
+                            f"Failed to remove container {container_id[:12]}: {rm_err}"
+                        )
 
             # Small delay to let Docker fully release resources
             time.sleep(0.5)
@@ -293,6 +439,7 @@ class BatchRunner:
         """
         try:
             import torch
+
             if torch.cuda.is_available():
                 logger.info("Cleaning up GPU memory...")
                 torch.cuda.empty_cache()
@@ -303,7 +450,9 @@ class BatchRunner:
                 for device_id in range(torch.cuda.device_count()):
                     allocated = torch.cuda.memory_allocated(device_id) / 1024**3
                     reserved = torch.cuda.memory_reserved(device_id) / 1024**3
-                    logger.debug(f"GPU {device_id} after cleanup: {allocated:.2f} GiB allocated, {reserved:.2f} GiB reserved")
+                    logger.debug(
+                        f"GPU {device_id} after cleanup: {allocated:.2f} GiB allocated, {reserved:.2f} GiB reserved"
+                    )
         except ImportError:
             logger.debug("PyTorch not available for GPU cleanup")
         except Exception as e:
@@ -329,6 +478,7 @@ class BatchRunner:
         if self.backend_type != "pytorch":
             # Create a temporary logger for the pre-run cleanup
             import logging
+
             temp_logger = logging.getLogger(__name__)
             temp_handler = logging.StreamHandler()
             temp_handler.setLevel(logging.INFO)
@@ -337,6 +487,7 @@ class BatchRunner:
 
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     temp_logger.info("Pre-run GPU cleanup...")
                     # Force garbage collection first
@@ -354,9 +505,13 @@ class BatchRunner:
                         for device_id in range(torch.cuda.device_count()):
                             torch.cuda.reset_accumulated_memory_stats(device_id)
                             # Only reset allocator if there's significant reserved memory
-                            reserved_gb = torch.cuda.memory_reserved(device_id) / 1024**3
+                            reserved_gb = (
+                                torch.cuda.memory_reserved(device_id) / 1024**3
+                            )
                             if reserved_gb > 10.0:  # More than 10 GB reserved
-                                temp_logger.info(f"Resetting memory allocator for GPU {device_id} ({reserved_gb:.2f} GiB reserved)")
+                                temp_logger.info(
+                                    f"Resetting memory allocator for GPU {device_id} ({reserved_gb:.2f} GiB reserved)"
+                                )
                                 with torch.cuda.device(device_id):
                                     torch.cuda.empty_cache()
                                     # Note: reset_max_memory_allocated is deprecated, using reset_peak_memory_stats instead
@@ -369,8 +524,10 @@ class BatchRunner:
                     for device_id in range(torch.cuda.device_count()):
                         allocated = torch.cuda.memory_allocated(device_id) / 1024**3
                         reserved = torch.cuda.memory_reserved(device_id) / 1024**3
-                        free = (torch.cuda.get_device_properties(device_id).total_memory -
-                               torch.cuda.memory_reserved(device_id)) / 1024**3
+                        free = (
+                            torch.cuda.get_device_properties(device_id).total_memory
+                            - torch.cuda.memory_reserved(device_id)
+                        ) / 1024**3
                         temp_logger.info(
                             f"GPU {device_id} before loading: {allocated:.2f} GiB allocated, "
                             f"{reserved:.2f} GiB reserved, {free:.2f} GiB free"
@@ -386,7 +543,9 @@ class BatchRunner:
             is_valid, error_msg = ParameterHandler.validate_config(config)
             if not is_valid:
                 logger.error(f"Invalid configuration: {error_msg}")
-                self.aggregator.add_failed_result(config, f"Invalid config: {error_msg}")
+                self.aggregator.add_failed_result(
+                    config, f"Invalid config: {error_msg}"
+                )
                 return False
 
             # Log configuration
@@ -400,11 +559,8 @@ class BatchRunner:
             logger.log_config(model_info)
 
             # Create model-specific output directory
-            run_dir = (
-                self.runs_dir
-                / ParameterHandler.format_model_name_for_filename(
-                    config.model_id, config.reasoning_state
-                )
+            run_dir = self.runs_dir / ParameterHandler.format_model_name_for_filename(
+                config.model_id, config.reasoning_state
             )
             run_dir.mkdir(exist_ok=True)
 
@@ -412,12 +568,18 @@ class BatchRunner:
             start_time = time.time()
 
             if self.backend_type == "pytorch":
-                # Use docker for pytorch backend
-                logger.info("Using docker-based execution for PyTorch backend...")
-                results = self._run_via_docker(config, run_dir, logger)
+                # Check if we should use Docker or direct execution
+                use_docker = os.environ.get("USE_DOCKER", "true").lower() != "false"
+
+                if use_docker:
+                    logger.info("Using docker-based execution for PyTorch backend...")
+                    results = self._run_via_docker(config, run_dir, logger)
+                else:
+                    logger.info("Using non-docker execution for PyTorch backend...")
+                    results = self._run_non_docker(config, run_dir, logger)
 
                 if results is None:
-                    error_msg = "Docker execution failed"
+                    error_msg = "Benchmark execution failed"
                     logger.error(error_msg)
                     self.aggregator.add_failed_result(config, error_msg)
                     return False
@@ -427,7 +589,9 @@ class BatchRunner:
                 logger.info("Using direct execution for vLLM backend...")
 
                 if BenchmarkRunner is None:
-                    error_msg = "BenchmarkRunner not available - install ai_energy_benchmarks"
+                    error_msg = (
+                        "BenchmarkRunner not available - install ai_energy_benchmarks"
+                    )
                     logger.error(error_msg)
                     self.aggregator.add_failed_result(config, error_msg)
                     return False
@@ -447,12 +611,16 @@ class BatchRunner:
                         logger.error(error_msg)
 
                         # Try to get more details about the failure
-                        logger.debug("Attempting to initialize backend directly for detailed error...")
+                        logger.debug(
+                            "Attempting to initialize backend directly for detailed error..."
+                        )
                         try:
-                            if hasattr(runner.backend, '_initialize_model'):
+                            if hasattr(runner.backend, "_initialize_model"):
                                 runner.backend._initialize_model()
                         except Exception as init_error:
-                            detailed_error = f"Benchmark validation failed: {str(init_error)}"
+                            detailed_error = (
+                                f"Benchmark validation failed: {str(init_error)}"
+                            )
                             logger.error(f"Detailed error: {detailed_error}")
                             self.aggregator.add_failed_result(config, detailed_error)
                             return False
@@ -492,7 +660,7 @@ class BatchRunner:
             return True
 
         except Exception as e:
-            logger.error(f"Benchmark failed with exception")
+            logger.error("Benchmark failed with exception")
             logger.log_error_details(e)
             self.aggregator.add_failed_result(config, str(e))
             return False
@@ -502,22 +670,28 @@ class BatchRunner:
             if self.backend_type == "pytorch":
                 # Docker execution - no in-process cleanup needed
                 # GPU memory is automatically freed when container exits
-                logger.debug("Docker execution - container cleanup handled automatically")
+                logger.debug(
+                    "Docker execution - container cleanup handled automatically"
+                )
             else:
                 # Direct execution (vLLM) - cleanup runner and GPU memory
                 if runner is not None:
                     logger.debug("Explicitly cleaning up runner and model...")
                     # Try to explicitly delete model from backend
                     try:
-                        if hasattr(runner, 'backend') and hasattr(runner.backend, 'model'):
+                        if hasattr(runner, "backend") and hasattr(
+                            runner.backend, "model"
+                        ):
                             logger.debug("Deleting model from backend...")
                             del runner.backend.model
                             runner.backend.model = None
-                        if hasattr(runner, 'backend') and hasattr(runner.backend, 'tokenizer'):
+                        if hasattr(runner, "backend") and hasattr(
+                            runner.backend, "tokenizer"
+                        ):
                             logger.debug("Deleting tokenizer from backend...")
                             del runner.backend.tokenizer
                             runner.backend.tokenizer = None
-                        if hasattr(runner, 'backend'):
+                        if hasattr(runner, "backend"):
                             logger.debug("Deleting backend...")
                             del runner.backend
                     except Exception as cleanup_err:
@@ -576,13 +750,8 @@ class BatchRunner:
 
         # Scenario configuration
         # Set token constraints based on reasoning mode
-        is_reasoning = self._is_reasoning_enabled(config.reasoning_params)
-        if is_reasoning:
-            # For reasoning modes: Allow model to generate as needed
-            generate_kwargs = {"max_new_tokens": 8192, "min_new_tokens": 1}
-        else:
-            # For non-reasoning modes: Fixed short response (10 tokens)
-            generate_kwargs = {"max_new_tokens": 10, "min_new_tokens": 10}
+        is_reasoning = is_reasoning_enabled(config.reasoning_params)
+        generate_kwargs = get_token_parameters(config.reasoning_params)
 
         scenario_cfg = ScenarioConfig(
             dataset_name=dataset_name,

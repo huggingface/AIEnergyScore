@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from omegaconf import OmegaConf
 import logging
+from reasoning_helpers import get_token_parameters
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,15 +52,18 @@ def load_optimum_config(config_name, config_dir="/optimum-benchmark/energy_star"
             logger.info(f"Loading config from: {config_path}")
             return OmegaConf.load(config_path)
 
-    raise FileNotFoundError(f"Config not found in any of: {[str(p) for p in search_paths]}")
+    raise FileNotFoundError(
+        f"Config not found in any of: {[str(p) for p in search_paths]}"
+    )
 
 
 def get_available_gpu_count():
     """Get the number of available GPUs"""
     try:
         import torch
+
         return torch.cuda.device_count()
-    except:
+    except Exception:
         return 0
 
 
@@ -79,14 +83,16 @@ def check_dataset_size(dataset_name, num_samples_requested):
         logger.info(f"Checking dataset size for: {dataset_name}")
 
         # Load dataset to check size
-        dataset = load_dataset(dataset_name, split='train')
+        dataset = load_dataset(dataset_name, split="train")
         dataset_size = len(dataset)
 
         logger.info(f"Dataset '{dataset_name}' contains {dataset_size} samples")
 
         if num_samples_requested > dataset_size:
             logger.warning("=" * 80)
-            logger.warning(f"WARNING: Requested {num_samples_requested} prompts, but dataset only has {dataset_size} samples!")
+            logger.warning(
+                f"WARNING: Requested {num_samples_requested} prompts, but dataset only has {dataset_size} samples!"
+            )
             logger.warning(f"Only {dataset_size} prompts will be processed.")
             logger.warning("=" * 80)
             return dataset_size
@@ -129,13 +135,19 @@ def convert_to_ai_energy_benchmarks_config(optimum_config, overrides):
             # If no valid IDs, use first GPU
             valid_device_ids = [0]
         if valid_device_ids != device_ids:
-            logger.warning(f"Adjusted device_ids from {device_ids} to {valid_device_ids} (found {available_gpus} GPUs)")
+            logger.warning(
+                f"Adjusted device_ids from {device_ids} to {valid_device_ids} (found {available_gpus} GPUs)"
+            )
             device_ids = valid_device_ids
     else:
         logger.warning("No GPUs detected, using device_ids=[0] anyway")
         device_ids = [0]
 
     # Build ai_energy_benchmarks compatible config
+    # Get reasoning-aware token parameters
+    reasoning_params = scenario.get("reasoning_params", None)
+    token_params = get_token_parameters(reasoning_params)
+
     config = {
         "backend": {
             "type": "pytorch",
@@ -151,17 +163,25 @@ def convert_to_ai_energy_benchmarks_config(optimum_config, overrides):
             "num_samples": int(scenario.get("num_samples", 1000)),
         },
         "generation": {
-            "max_new_tokens": int(scenario.get("generate_kwargs", {}).get("max_new_tokens", 100)),
-            "min_new_tokens": int(scenario.get("generate_kwargs", {}).get("min_new_tokens", 50)),
+            "max_new_tokens": int(
+                scenario.get("generate_kwargs", {}).get(
+                    "max_new_tokens", token_params["max_new_tokens"]
+                )
+            ),
+            "min_new_tokens": int(
+                scenario.get("generate_kwargs", {}).get(
+                    "min_new_tokens", token_params["min_new_tokens"]
+                )
+            ),
         },
         "reasoning": {
             "enabled": scenario.get("reasoning", False),
-            "params": scenario.get("reasoning_params", None),
+            "params": reasoning_params,
         },
         "metrics": {
             "enabled": True,
             "project_name": "ai_energy_benchmark",
-        }
+        },
     }
 
     return config
@@ -171,8 +191,11 @@ def run_pytorch_backend(config, output_dir):
     """Run ai_energy_benchmarks with PyTorch backend"""
     try:
         from ai_energy_benchmarks.config.parser import (
-            BenchmarkConfig, BackendConfig, ScenarioConfig,
-            MetricsConfig, ReporterConfig
+            BenchmarkConfig,
+            BackendConfig,
+            ScenarioConfig,
+            MetricsConfig,
+            ReporterConfig,
         )
         from ai_energy_benchmarks.runner import BenchmarkRunner
 
@@ -183,11 +206,10 @@ def run_pytorch_backend(config, output_dir):
 
         # Check dataset size and warn if requested samples exceed dataset size
         actual_num_samples = check_dataset_size(
-            config['dataset']['name'],
-            config['dataset']['num_samples']
+            config["dataset"]["name"], config["dataset"]["num_samples"]
         )
         # Update config with actual number of samples that will be used
-        config['dataset']['num_samples'] = actual_num_samples
+        config["dataset"]["num_samples"] = actual_num_samples
 
         # Create output directory
         output_path = Path(output_dir)
@@ -247,14 +269,16 @@ def run_pytorch_backend(config, output_dir):
 
         # Save results as JSON for compatibility
         result_file = output_path / "benchmark_report.json"
-        with open(result_file, 'w') as f:
+        with open(result_file, "w") as f:
             json.dump(results, f, indent=2)
 
         logger.info("Benchmark completed successfully")
         logger.info(f"Results saved to: {result_file}")
 
         if "energy" in results:
-            logger.info(f"GPU Energy: {results['energy'].get('gpu_energy_wh', 0):.2f} Wh")
+            logger.info(
+                f"GPU Energy: {results['energy'].get('gpu_energy_wh', 0):.2f} Wh"
+            )
 
         return results
 
@@ -262,11 +286,13 @@ def run_pytorch_backend(config, output_dir):
         logger.error(f"ai_energy_benchmarks not installed or missing dependencies: {e}")
         logger.error("Install with: pip install ai_energy_benchmarks[pytorch]")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     except Exception as e:
         logger.error(f"Error running benchmark: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
@@ -275,8 +301,11 @@ def run_vllm_backend(config, output_dir, endpoint):
     """Run ai_energy_benchmarks with vLLM backend"""
     try:
         from ai_energy_benchmarks.config.parser import (
-            BenchmarkConfig, BackendConfig, ScenarioConfig,
-            MetricsConfig, ReporterConfig
+            BenchmarkConfig,
+            BackendConfig,
+            ScenarioConfig,
+            MetricsConfig,
+            ReporterConfig,
         )
         from ai_energy_benchmarks.runner import BenchmarkRunner
 
@@ -288,11 +317,10 @@ def run_vllm_backend(config, output_dir, endpoint):
 
         # Check dataset size and warn if requested samples exceed dataset size
         actual_num_samples = check_dataset_size(
-            config['dataset']['name'],
-            config['dataset']['num_samples']
+            config["dataset"]["name"], config["dataset"]["num_samples"]
         )
         # Update config with actual number of samples that will be used
-        config['dataset']['num_samples'] = actual_num_samples
+        config["dataset"]["num_samples"] = actual_num_samples
 
         # Create output directory
         output_path = Path(output_dir)
@@ -351,14 +379,16 @@ def run_vllm_backend(config, output_dir, endpoint):
 
         # Save results as JSON for compatibility
         result_file = output_path / "benchmark_report.json"
-        with open(result_file, 'w') as f:
+        with open(result_file, "w") as f:
             json.dump(results, f, indent=2)
 
         logger.info("Benchmark completed successfully")
         logger.info(f"Results saved to: {result_file}")
 
         if "energy" in results:
-            logger.info(f"GPU Energy: {results['energy'].get('gpu_energy_wh', 0):.2f} Wh")
+            logger.info(
+                f"GPU Energy: {results['energy'].get('gpu_energy_wh', 0):.2f} Wh"
+            )
 
         return results
 
@@ -366,11 +396,13 @@ def run_vllm_backend(config, output_dir, endpoint):
         logger.error(f"ai_energy_benchmarks not installed: {e}")
         logger.error("Install with: pip install ai_energy_benchmarks")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     except Exception as e:
         logger.error(f"Error running benchmark: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
@@ -403,9 +435,9 @@ def main():
         if not vllm_endpoint:
             logger.error("VLLM_ENDPOINT environment variable required for vLLM backend")
             sys.exit(1)
-        results = run_vllm_backend(config, output_dir, vllm_endpoint)
+        _ = run_vllm_backend(config, output_dir, vllm_endpoint)
     else:
-        results = run_pytorch_backend(config, output_dir)
+        _ = run_pytorch_backend(config, output_dir)
 
     logger.info(f"Results saved to: {output_dir}/benchmark_report.json")
 
