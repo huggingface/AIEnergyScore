@@ -55,7 +55,7 @@ NC='\033[0m' # No Color
 # Default configuration
 RESULTS_DIR="${RESULTS_DIR:-${SCRIPT_DIR}/results}"
 HF_CACHE="${HF_HOME:-${HOME}/.cache/huggingface}"
-VENV_DIR="${VENV_DIR:-${SCRIPT_DIR}/.venv}"
+VENV_DIR="/fsx/sasha_luccioni/miniconda3/envs/energystardeepseek"
 NUM_SAMPLES=10
 BACKEND="${BENCHMARK_BACKEND:-pytorch}"
 ENDPOINT="${VLLM_ENDPOINT:-http://localhost:8000/v1}"
