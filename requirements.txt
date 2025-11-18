@@ -1,3 +1,4 @@
+ai_energy_benchmarks==0.0.4
 accelerate==1.10.0
 codecarbon==3.0.4
 datasets==4.0.0
@@ -9,4 +10,4 @@ omegaconf==2.3.0
 pandas>=2.0.0
 tiktoken>=0.12.0
 einops
-ai_energy_benchmarks==0.0.4
+
