@@ -342,8 +342,8 @@ $$
 Experiments are conducted on a cluster equipped with NVIDIA H100 GPUs (with 80GB memory). 
 
 <div style="display: flex; justify-content: center; align-items: center; gap: 20px;">
-    <img src="https://framerusercontent.com/images/0iDH2BF0kzyfrce3IF5yGGrNSY.svg" alt="Neuralwatt Logo" width="400">
-    <img src="https://cdn.helloasso.com/img/logos/croppedimage-6d885a991d9b40929669eb38a2f723a3.png" alt="Code Carbon Logo" width="400">
+    <img src="https://images.squarespace-cdn.com/content/v1/6155af7da5675116403c9136/ec64b32c-e759-4561-96dc-4a72623e97b9/LogoTransparent+-+black.png" alt="Neuralwatt Logo" width="400">
+    <img src="https://avatars.githubusercontent.com/u/54071934?v=4" alt="Code Carbon Logo" width="400">
 </div>
 
 
