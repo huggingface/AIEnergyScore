@@ -342,8 +342,8 @@ $$
 Experiments are conducted on a cluster equipped with NVIDIA H100 GPUs (with 80GB memory). 
 
 <div style="display: flex; justify-content: center; align-items: center; gap: 20px;">
-    <img src="https://raw.githubusercontent.com/huggingface/optimum-benchmark/main/logo.png" alt="Optimum Benchmark Logo" width="400">
-    <img src="https://codecarbon.io/assets/img/code-carbon-logo-08-black-01.svg" alt="Code Carbon Logo" width="400">
+    <img src="https://framerusercontent.com/images/0iDH2BF0kzyfrce3IF5yGGrNSY.svg" alt="Neuralwatt Logo" width="400">
+    <img src="https://cdn.helloasso.com/img/logos/croppedimage-6d885a991d9b40929669eb38a2f723a3.png" alt="Code Carbon Logo" width="400">
 </div>
 
 
