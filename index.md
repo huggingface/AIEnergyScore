@@ -347,7 +347,7 @@ Experiments are conducted on a cluster equipped with NVIDIA H100 GPUs (with 80GB
 </div>
 
 
-We utilize the [AI Energy Benchmarks]([https://github.com/huggingface/optimum-benchmark](https://pypi.org/project/ai-energy-benchmarks/) from [Neuralwatt](https://www.neuralwatt.com/) to launch the benchmark and [CodeCarbon](https://mlco2.github.io/codecarbon/) to track energy consumption. CodeCarbon enables the monitoring of energy usage across all hardware components, including the CPU, GPU, and RAM, during inference. Specifically, CodeCarbon leverages the NVIDIA System Management Interface ([nvidia-smi](https://docs.nvidia.com/deploy/nvidia-smi/index.html)), a command-line utility, to measure GPU energy consumption. Furthermore, it provides a detailed breakdown of energy contributions from individual steps such as preprocess, prefill, and decode.
+We utilize the [AI Energy Benchmarks](https://pypi.org/project/ai-energy-benchmarks/) from [Neuralwatt](https://www.neuralwatt.com/) to launch the benchmark and [CodeCarbon](https://mlco2.github.io/codecarbon/) to track energy consumption. CodeCarbon enables the monitoring of energy usage across all hardware components, including the CPU, GPU, and RAM, during inference. Specifically, CodeCarbon leverages the NVIDIA System Management Interface ([nvidia-smi](https://docs.nvidia.com/deploy/nvidia-smi/index.html)), a command-line utility, to measure GPU energy consumption. Furthermore, it provides a detailed breakdown of energy contributions from individual steps such as preprocess, prefill, and decode.
 
 ### Precision
 
