@@ -8,7 +8,7 @@
 ,https://huggingface.co/openai/gpt-oss-20b,1,B,text_gen,On (Medium),"  reasoning: True
   reasoning_params:
     reasoning_effort: medium"
-,https://huggingface.co/google/gemma-3-4b-pt,1,A,text_gen,On,  reasoning: True
+,https://huggingface.co/google/gemma-3-4b-pt,1,A,text_gen,Off (N/A),N/A (default)
 ,https://huggingface.co/HuggingFaceTB/SmolLM3-3B,1,A,text_gen,On,"reasoning: True
 "
 ,https://huggingface.co/HuggingFaceTB/SmolLM3-3B,1,A,text_gen,Off,"reasoning: False
@@ -75,4 +75,5 @@
 ,https://huggingface.co/google/gemma-3-1b-it,3,A,text_gen,On,"default"
 ,https://huggingface.co/google/gemma-3-12b-it,3,A,text_gen,On,"default"
 ,https://huggingface.co/google/gemma-3-27b-it,3,B,text_gen,On,"default"
+
 
