@@ -71,4 +71,8 @@
 ,https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B,3,C,text_gen,On,enable_thinking=True
 ,https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,3,C,text_gen,Off,enable_thinking=False
 ,https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,3,C,text_gen,On,enable_thinking=True
+,https://huggingface.co/google/gemma-3-270m-it,3,A,text_gen,On,"default"
+,https://huggingface.co/google/gemma-3-1b-it,3,A,text_gen,On,"default"
+,https://huggingface.co/google/gemma-3-12b-it,3,A,text_gen,On,"default"
+,https://huggingface.co/google/gemma-3-27b-it,3,B,text_gen,On,"default"
 
